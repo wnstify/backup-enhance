@@ -1,0 +1,10 @@
+# Local credentials and generated runtime files
+env
+rclone.conf
+*.tar.gz
+*.sql
+*.sql.gz
+
+# Editor and OS noise
+.DS_Store
+*~
