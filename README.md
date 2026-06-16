@@ -78,6 +78,33 @@ BACKUP_NAME_MODE=full-domain
 
 With `full-domain`, `testing1.com` becomes `testing1.com_25-5-26_18-00.tar.gz`.
 
+## Timer Presets
+
+The installers accept either a preset number or a custom systemd `OnCalendar`
+value.
+
+Database timer presets:
+
+```text
+1) Hourly:              *-*-* *:00:00
+2) Every 2 hours:       *-*-* 00/2:00:00
+3) Every 3 hours:       *-*-* 00/3:00:00
+4) Every 6 hours:       *-*-* 00/6:00:00
+5) Twice daily:         *-*-* 02,14:30:00
+6) Daily default:       *-*-* 02:30:00
+```
+
+Files timer presets:
+
+```text
+1) Daily:               *-*-* 03:00:00
+2) Every 3 days:        *-*-01/3 04:00:00
+3) Weekly:              Sun *-*-* 04:00:00
+4) Every 10 days:       *-*-01/10 04:00:00
+5) Every 14 days:       *-*-01/14 04:00:00
+6) Monthly:             *-*-01 04:00:00
+```
+
 ## Security Model
 
 - Database dumps use MariaDB root socket auth, so app database passwords are not

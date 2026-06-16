@@ -36,6 +36,35 @@ prompt() {
   printf -v "$var_name" '%s' "$value"
 }
 
+prompt_files_timer_calendar() {
+  local var_name=$1
+  local default=$2
+  local value
+
+  cat <<'TIMER_OPTIONS'
+Files timer presets:
+  1) Daily:               *-*-* 03:00:00
+  2) Every 3 days:        *-*-01/3 04:00:00
+  3) Weekly:              Sun *-*-* 04:00:00
+  4) Every 10 days:       *-*-01/10 04:00:00
+  5) Every 14 days:       *-*-01/14 04:00:00
+  6) Monthly:             *-*-01 04:00:00
+Enter a preset number, or paste a custom systemd OnCalendar value.
+TIMER_OPTIONS
+
+  read -r -p "Systemd OnCalendar schedule [$default]: " value
+  value=${value:-$default}
+  case "$value" in
+    1) value='*-*-* 03:00:00' ;;
+    2) value='*-*-01/3 04:00:00' ;;
+    3) value='Sun *-*-* 04:00:00' ;;
+    4) value='*-*-01/10 04:00:00' ;;
+    5) value='*-*-01/14 04:00:00' ;;
+    6) value='*-*-01 04:00:00' ;;
+  esac
+  printf -v "$var_name" '%s' "$value"
+}
+
 yes_no() {
   local var_name=$1
   local label=$2
@@ -119,7 +148,7 @@ chmod 0644 "$SERVICE_FILE"
 
 yes_no INSTALL_TIMER "Install and enable a systemd timer?" "y"
 if [[ "$INSTALL_TIMER" == "yes" ]]; then
-  prompt TIMER_CALENDAR "Systemd OnCalendar schedule" "*-*-* 03:00:00"
+  prompt_files_timer_calendar TIMER_CALENDAR "*-*-* 03:00:00"
   cat >"$TIMER_FILE" <<TIMER
 [Unit]
 Description=Run Enhance WordPress files backup

@@ -47,6 +47,35 @@ prompt_secret() {
   printf -v "$var_name" '%s' "$value"
 }
 
+prompt_db_timer_calendar() {
+  local var_name=$1
+  local default=$2
+  local value
+
+  cat <<'TIMER_OPTIONS'
+Database timer presets:
+  1) Hourly:              *-*-* *:00:00
+  2) Every 2 hours:       *-*-* 00/2:00:00
+  3) Every 3 hours:       *-*-* 00/3:00:00
+  4) Every 6 hours:       *-*-* 00/6:00:00
+  5) Twice daily:         *-*-* 02,14:30:00
+  6) Daily default:       *-*-* 02:30:00
+Enter a preset number, or paste a custom systemd OnCalendar value.
+TIMER_OPTIONS
+
+  read -r -p "Systemd OnCalendar schedule [$default]: " value
+  value=${value:-$default}
+  case "$value" in
+    1) value='*-*-* *:00:00' ;;
+    2) value='*-*-* 00/2:00:00' ;;
+    3) value='*-*-* 00/3:00:00' ;;
+    4) value='*-*-* 00/6:00:00' ;;
+    5) value='*-*-* 02,14:30:00' ;;
+    6) value='*-*-* 02:30:00' ;;
+  esac
+  printf -v "$var_name" '%s' "$value"
+}
+
 yes_no() {
   local var_name=$1
   local label=$2
@@ -170,7 +199,7 @@ chmod 0644 "$SERVICE_FILE"
 
 yes_no INSTALL_TIMER "Install and enable a systemd timer?" "y"
 if [[ "$INSTALL_TIMER" == "yes" ]]; then
-  prompt TIMER_CALENDAR "Systemd OnCalendar schedule" "*-*-* 02:30:00"
+  prompt_db_timer_calendar TIMER_CALENDAR "*-*-* 02:30:00"
   cat >"$TIMER_FILE" <<TIMER
 [Unit]
 Description=Run Enhance MariaDB website database backup
