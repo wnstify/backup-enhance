@@ -164,6 +164,33 @@ systemctl status enhance-files-backup.timer
 journalctl -u enhance-files-backup.service
 ```
 
+## Existing Server Fixes
+
+If file backups upload only the first few sites and then stop, check for a
+systemd timeout, live files changing during tar, or local plugin backup files:
+
+```bash
+journalctl -u enhance-files-backup.service --since today
+```
+
+Fix an already-installed server:
+
+```bash
+sudo sed -i '/^ExecStart=/a TimeoutStartSec=0' /etc/systemd/system/enhance-files-backup.service
+sudo systemctl daemon-reload
+sudo systemctl restart enhance-files-backup.timer
+```
+
+If logs show `file changed as we read it` or local `.wpress` archives are being
+included, update the installed runner from the latest repo version:
+
+```bash
+sudo install -o root -g root -m 0755 enhance-files-backup.sh /usr/local/sbin/enhance-files-backup
+sudo bash -n /usr/local/sbin/enhance-files-backup
+```
+
+New installs include these settings automatically.
+
 ## Restore
 
 Use `db-restore.md` for database restores and `files-restore.md` for

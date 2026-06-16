@@ -110,6 +110,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=$INSTALL_BIN
+TimeoutStartSec=0
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

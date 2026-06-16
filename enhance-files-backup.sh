@@ -269,6 +269,7 @@ preserve_failed_archive() {
 }
 
 tar_excludes=(
+  --exclude='*.[wW][pP][rR][eE][sS][sS]'
   --exclude='public_html/*.zip'
   --exclude='public_html/*.ZIP'
   --exclude='public_html/*.wpress'
@@ -324,6 +325,7 @@ tar_excludes=(
 )
 
 tar_content_excludes=(
+  --exclude='*.[wW][pP][rR][eE][sS][sS]'
   --exclude='./*.zip'
   --exclude='./*.ZIP'
   --exclude='./*.wpress'
@@ -416,6 +418,9 @@ backup_site_files() {
         --acls \
         --xattrs \
         --one-file-system \
+        --ignore-failed-read \
+        --warning=no-file-changed \
+        --warning=no-file-removed \
         "${tar_content_excludes[@]}" \
         .
       ;;
@@ -429,6 +434,9 @@ backup_site_files() {
         --acls \
         --xattrs \
         --one-file-system \
+        --ignore-failed-read \
+        --warning=no-file-changed \
+        --warning=no-file-removed \
         "${tar_excludes[@]}" \
         public_html
       ;;
