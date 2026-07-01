@@ -156,6 +156,18 @@ WantedBy=timers.target
 TIMER
 }
 
+# Inline the shared library into a runner, emitting a standalone script on
+# stdout: the single `source ...enhance-backup-lib.sh` line is replaced by the
+# library body (its shebang stripped). Defined above the source-guard so
+# test_assemble.sh can drive it without running the installer.
+assemble_runner() {
+  local runner=$1 lib=$2
+  LIB_BODY=$(tail -n +2 "$lib") awk '
+    /source.*enhance-backup-lib\.sh/ { print ENVIRON["LIB_BODY"]; next }
+    { print }
+  ' "$runner"
+}
+
 # Tests source this file for the pure renderers above; stop before the
 # interactive install runs.
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] || return 0
