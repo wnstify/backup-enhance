@@ -11,9 +11,10 @@ The files job reuses the same rclone credentials, archives each site's
 common local backup/archive files, uploads to B2, verifies the remote object,
 and removes the local archive only after verification succeeds.
 
-## Install Database Backups First
+## Install
 
-Run from this directory:
+One command sets up both the database and files backups. Run from this
+directory:
 
 ```bash
 sudo ./install.sh
@@ -21,34 +22,26 @@ sudo ./install.sh
 
 The installer asks for:
 
-- Backblaze application key ID
-- Backblaze application key
+- Backblaze application key ID and application key
 - Backblaze bucket name
-- Backup folder inside the bucket, for example `database-backups/server-name`
-- `/var/www` scan path, temp directory, archive date format, and retention days
-- Optional systemd timer schedule
+- Database backup folder inside the bucket, for example
+  `database-backups/server-name`
+- `/var/www` scan path, temp directory, archive date format, name mode, and
+  database retention days
+- File backup rclone target (defaults to the database target with
+  `database-backups` swapped for `file-backups`), files retention, verify mode,
+  and archive layout
+- Optional systemd timer schedules for the database and files jobs
 
 Use a restricted Backblaze application key scoped to the backup bucket.
 
-## Install File Backups After Database Backups
-
-Run from this directory:
-
-```bash
-sudo ./install-files-backup.sh
-```
-
-The files installer reuses `/etc/enhance-db-backup/rclone.conf` and
-`/etc/enhance-db-backup/env`. By default it changes the database target from:
+Re-running the installer upgrades an existing server in place: it detects the
+stored B2 key and offers to keep it (so you do not re-enter credentials), and
+prefills every prompt from the current `/etc/enhance-db-backup/env`. The default
+files target is derived from the database target:
 
 ```text
-b2:BUCKET/database-backups/server-name
-```
-
-to:
-
-```text
-b2:BUCKET/file-backups/server-name
+b2:BUCKET/database-backups/server-name   ->   b2:BUCKET/file-backups/server-name
 ```
 
 ## Backup Naming
