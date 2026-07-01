@@ -8,3 +8,6 @@ rclone.conf
 # Editor and OS noise
 .DS_Store
 *~
+
+# Local planning docs
+*.local.md
