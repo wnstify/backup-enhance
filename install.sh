@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)
 DB_RUNNER_SOURCE="$SCRIPT_DIR/enhance-db-backup.sh"
 FILES_RUNNER_SOURCE="$SCRIPT_DIR/enhance-files-backup.sh"
 LIB_RUNNER_SOURCE="$SCRIPT_DIR/enhance-backup-lib.sh"
@@ -170,8 +170,12 @@ assemble_runner() {
 }
 
 # Tests source this file for the pure renderers above; stop before the
-# interactive install runs.
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] || return 0
+# interactive install runs. Sourced iff BASH_SOURCE is set and differs from $0;
+# when piped (`curl | bash`) or run as `bash -c`, BASH_SOURCE is unset and the
+# install must proceed rather than `return` from a non-sourced script.
+if [[ -n "${BASH_SOURCE[0]:-}" && "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  return 0
+fi
 
 # --------------------------------------------------------------------------
 # Interactive install below. Nothing here runs when the file is sourced.
