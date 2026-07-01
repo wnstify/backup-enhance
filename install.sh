@@ -152,6 +152,7 @@ cat >"$RCLONE_CONFIG_FILE" <<RCLONE
 type = b2
 account = $B2_KEY_ID
 key = $B2_APP_KEY
+hard_delete = true
 RCLONE
 chmod 600 "$RCLONE_CONFIG_FILE"
 chown root:root "$RCLONE_CONFIG_FILE"
