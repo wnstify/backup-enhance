@@ -13,8 +13,15 @@ and removes the local archive only after verification succeeds.
 
 ## Install
 
-One command sets up both the database and files backups. Run from this
-directory:
+One command sets up both the database and files backups. Straight from GitHub:
+
+```bash
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/wnstify/backup-enhance/main/install.sh)"
+```
+
+This fetches both runners into a temp directory and walks you through setup.
+Prompts read from the terminal, so the command stays interactive. Or, from a
+clone of this repo:
 
 ```bash
 sudo ./install.sh
