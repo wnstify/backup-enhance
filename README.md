@@ -129,6 +129,10 @@ Files timer presets:
   non-transactional tables.
 - Remote retention uses `BACKUP_RETENTION_DAYS`; `0` disables automatic remote
   deletion.
+- The `[b2]` remote sets `hard_delete = true` and the prune passes
+  `--b2-hard-delete`, so retention permanently removes old object versions. On a
+  versioned bucket without this, `rclone delete` only writes a hide-marker and
+  every "deleted" archive keeps billing forever.
 - File backups use `FILES_BACKUP_RCLONE_TARGET`,
   `FILES_BACKUP_RETENTION_DAYS`, `FILES_BACKUP_VERIFY_MODE`, and
   `FILES_BACKUP_ARCHIVE_LAYOUT`.
@@ -217,6 +221,16 @@ sudo bash -n /usr/local/sbin/enhance-files-backup
 ```
 
 New installs include these settings automatically.
+
+On a server installed before hard-delete, add `hard_delete = true` under `[b2]`
+in `/etc/enhance-db-backup/rclone.conf`, reinstall the runners from this repo,
+then reap the hidden version backlog once (live 7-day window untouched):
+
+```bash
+sudo bash -c 'set -a; . /etc/enhance-db-backup/env; set +a; \
+  rclone --config "$BACKUP_RCLONE_CONFIG" cleanup "$BACKUP_RCLONE_TARGET"; \
+  rclone --config "$BACKUP_RCLONE_CONFIG" cleanup "$FILES_BACKUP_RCLONE_TARGET"'
+```
 
 ## Restore
 
