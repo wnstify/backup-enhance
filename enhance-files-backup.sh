@@ -67,6 +67,22 @@ build_tar_excludes() {
   done
 }
 
+# Read the site's home/siteurl from wp_options to name the archive. Connects
+# through the configured MYSQL array (same socket/user as the db runner) so both
+# jobs resolve the same URL and derive the same slug for a site.
+mysql_site_url() {
+  local db=$1
+  local table_prefix=$2
+  local dbq tableq
+
+  command -v mariadb >/dev/null 2>&1 || return 0
+  [[ -n "$db" ]] || return 0
+
+  dbq=$(quote_identifier "$db")
+  tableq=$(quote_identifier "${table_prefix:-wp_}options")
+  "${MYSQL[@]}" --execute "SELECT option_value FROM ${dbq}.${tableq} WHERE option_name IN ('home','siteurl') ORDER BY FIELD(option_name,'home','siteurl') LIMIT 1;" 2>/dev/null || true
+}
+
 # Allow tests to source this file for its functions without running the backup.
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] || return 0
 
@@ -123,6 +139,8 @@ BACKUP_WEB_ROOT=${BACKUP_WEB_ROOT:-/var/www}
 BACKUP_FIND_MAXDEPTH=${BACKUP_FIND_MAXDEPTH:-4}
 BACKUP_DATE_FORMAT=${BACKUP_DATE_FORMAT:-%-d-%-m-%y_%H-%M}
 BACKUP_NAME_MODE=${BACKUP_NAME_MODE:-first-label}
+BACKUP_MYSQL_USER=${BACKUP_MYSQL_USER:-root}
+BACKUP_MYSQL_SOCKET=${BACKUP_MYSQL_SOCKET:-/run/mysqld/mysqld.sock}
 BACKUP_RCLONE_CONFIG=${BACKUP_RCLONE_CONFIG:-/etc/enhance-db-backup/rclone.conf}
 BACKUP_RCLONE_TARGET=${BACKUP_RCLONE_TARGET:-}
 FILES_BACKUP_RCLONE_TARGET=${FILES_BACKUP_RCLONE_TARGET:-}
@@ -165,6 +183,10 @@ if [[ "$DRY_RUN" == "false" ]]; then
 fi
 
 RCLONE=(rclone --config "$BACKUP_RCLONE_CONFIG")
+MYSQL=(mariadb --batch --raw --skip-column-names --user="$BACKUP_MYSQL_USER")
+if [[ -n "$BACKUP_MYSQL_SOCKET" ]]; then
+  MYSQL+=(--socket="$BACKUP_MYSQL_SOCKET")
+fi
 
 # Assign the library's generic-global contract from this runner's FILES_BACKUP_* env.
 RCLONE_TARGET=$FILES_BACKUP_RCLONE_TARGET
@@ -182,19 +204,6 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-
-mysql_site_url() {
-  local db=$1
-  local table_prefix=$2
-  local dbq tableq
-
-  command -v mariadb >/dev/null 2>&1 || return 0
-  [[ -n "$db" ]] || return 0
-
-  dbq=$(quote_identifier "$db")
-  tableq=$(quote_identifier "${table_prefix:-wp_}options")
-  sudo mariadb --batch --raw --skip-column-names --execute "SELECT option_value FROM ${dbq}.${tableq} WHERE option_name IN ('home','siteurl') ORDER BY FIELD(option_name,'home','siteurl') LIMIT 1;" 2>/dev/null || true
-}
 
 backup_site_files() {
   local config_path=$1
