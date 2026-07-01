@@ -14,6 +14,11 @@ DB_TIMER_FILE=/etc/systemd/system/enhance-db-backup.timer
 FILES_SERVICE_FILE=/etc/systemd/system/enhance-files-backup.service
 FILES_TIMER_FILE=/etc/systemd/system/enhance-files-backup.timer
 
+# Where the runners are fetched from when install.sh is piped straight from
+# GitHub (curl one-liner) instead of run inside a clone. Override to install
+# from a fork or branch.
+REPO_RAW_BASE=${REPO_RAW_BASE:-https://raw.githubusercontent.com/wnstify/backup-enhance/main}
+
 log() {
   printf '[install] %s\n' "$*"
 }
@@ -73,6 +78,10 @@ resolve_files_timer() {
 
 env_line() {
   printf '%s=%s\n' "$1" "$(shell_quote "$2")"
+}
+
+runner_url() {
+  printf '%s/%s' "${REPO_RAW_BASE%/}" "$1"
 }
 
 # Render the full env consumed by both runners. Reads the *_VALUE answers set by
@@ -229,6 +238,22 @@ TIMER_OPTIONS
   value=${value:-$default}
   printf -v "$var_name" '%s' "$(resolve_files_timer "$value")"
 }
+
+# When piped from GitHub the runners are not on disk next to this script, so
+# fetch them into a temp dir from REPO_RAW_BASE.
+if [[ ! -f "$DB_RUNNER_SOURCE" || ! -f "$FILES_RUNNER_SOURCE" ]]; then
+  command -v curl >/dev/null 2>&1 || { apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl; }
+  BOOTSTRAP_DIR=$(mktemp -d)
+  trap 'rm -rf "$BOOTSTRAP_DIR"' EXIT
+  log "Fetching runners from $REPO_RAW_BASE"
+  for runner in enhance-db-backup.sh enhance-files-backup.sh; do
+    curl -fsSL "$(runner_url "$runner")" -o "$BOOTSTRAP_DIR/$runner" \
+      || die "Failed to download $runner from $REPO_RAW_BASE"
+    [[ -s "$BOOTSTRAP_DIR/$runner" ]] || die "Downloaded $runner is empty"
+  done
+  DB_RUNNER_SOURCE="$BOOTSTRAP_DIR/enhance-db-backup.sh"
+  FILES_RUNNER_SOURCE="$BOOTSTRAP_DIR/enhance-files-backup.sh"
+fi
 
 [[ -f "$DB_RUNNER_SOURCE" ]] || die "Runner not found: $DB_RUNNER_SOURCE"
 [[ -f "$FILES_RUNNER_SOURCE" ]] || die "Runner not found: $FILES_RUNNER_SOURCE"

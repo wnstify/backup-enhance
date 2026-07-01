@@ -66,6 +66,14 @@ grep -qF 'OnCalendar=*-*-* 02:30:00' <<<"$tmr" || fail "render_timer: OnCalendar
 grep -qF 'Persistent=true' <<<"$tmr" || fail "render_timer: Persistent"; ok
 grep -qF 'RandomizedDelaySec=15m' <<<"$tmr" || fail "render_timer: RandomizedDelaySec"; ok
 
+# --- Behavior 5: curl-bootstrap fetches runners from the right raw URL -------
+[[ "$(runner_url enhance-db-backup.sh)" == \
+   'https://raw.githubusercontent.com/wnstify/backup-enhance/main/enhance-db-backup.sh' ]] \
+  || fail "runner_url: wrong default raw base (a typo here 404s the one-liner)"; ok
+REPO_RAW_BASE='https://example.test/x/' runner_url foo.sh >/dev/null
+[[ "$(REPO_RAW_BASE='https://example.test/x/' runner_url foo.sh)" == 'https://example.test/x/foo.sh' ]] \
+  || fail "runner_url: override base should be honored without a double slash"; ok
+
 # --- Bonus: rclone.conf carries hard_delete (guards the B2 versioning fix) ---
 grep -qF 'hard_delete = true' <<<"$(render_rclone_conf keyid appkey)" \
   || fail "render_rclone_conf: hard_delete missing (soft-delete would leak B2 versions)"; ok
