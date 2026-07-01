@@ -76,3 +76,98 @@ prune_remote() {
   log "Deleting remote archives older than ${retention_days}d from ${target}"
   "${RCLONE[@]}" delete "$target" --b2-hard-delete --include '*.tar.gz' --min-age "${retention_days}d"
 }
+
+# Remote upload pipeline. Reads the generic-global contract: RCLONE, RCLONE_TARGET,
+# VERIFY_MODE, UPLOAD_RETRIES, UPLOAD_RETRY_DELAY, LOW_LEVEL_RETRIES, FAILED_DIR.
+rclone_remote_size() {
+  local remote_file=$1
+  local output
+  output=$("${RCLONE[@]}" size "$remote_file" --json 2>/dev/null || true)
+  printf '%s\n' "$output" | sed -nE 's/.*"bytes"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' | head -n 1
+}
+
+verify_rclone_archive() {
+  local archive_file=$1
+  local remote_file=$2
+  local archive_name=$3
+  local local_size remote_size
+
+  local_size=$(stat -c '%s' "$archive_file")
+  remote_size=$(rclone_remote_size "$remote_file")
+
+  if [[ -z "$remote_size" || "$remote_size" != "$local_size" ]]; then
+    log "Verification failed for archive=${archive_name}: local_size=${local_size} remote_size=${remote_size:-missing}"
+    return 1
+  fi
+
+  case "$VERIFY_MODE" in
+    size)
+      return 0
+      ;;
+    deep)
+      "${RCLONE[@]}" cat "$remote_file" | tar -tzf - >/dev/null
+      ;;
+    none)
+      return 0
+      ;;
+    *)
+      die "Invalid VERIFY_MODE=${VERIFY_MODE}; use size, deep, or none"
+      ;;
+  esac
+}
+
+upload_archive_with_retries() {
+  local archive_file=$1
+  local archive_name=$2
+  local remote_file="${RCLONE_TARGET}/${archive_name}"
+  local attempt status sleep_seconds
+
+  for ((attempt = 1; attempt <= UPLOAD_RETRIES; attempt++)); do
+    log "Uploading archive=${archive_name} to ${RCLONE_TARGET} attempt=${attempt}/${UPLOAD_RETRIES}"
+
+    set +e
+    "${RCLONE[@]}" copyto "$archive_file" "$remote_file" \
+      --retries 1 \
+      --low-level-retries "$LOW_LEVEL_RETRIES" \
+      --transfers 1 \
+      --checkers 4
+    status=$?
+    set -e
+
+    if ((status == 0)) && verify_rclone_archive "$archive_file" "$remote_file" "$archive_name"; then
+      log "Verified archive=${archive_name} remote=${remote_file} mode=${VERIFY_MODE}"
+      return 0
+    fi
+
+    if ((status != 0)); then
+      log "Upload attempt ${attempt} failed with rclone exit status ${status}"
+    else
+      log "Upload attempt ${attempt} completed but verification failed"
+    fi
+
+    if ((attempt < UPLOAD_RETRIES)); then
+      sleep_seconds=$((UPLOAD_RETRY_DELAY * attempt))
+      log "Retrying archive=${archive_name} in ${sleep_seconds}s"
+      sleep "$sleep_seconds"
+    fi
+  done
+
+  return 1
+}
+
+preserve_failed_archive() {
+  local archive_file=$1
+  local archive_name=$2
+  local preserved
+
+  mkdir -p "$FAILED_DIR"
+  chmod 700 "$FAILED_DIR"
+  preserved="$FAILED_DIR/${archive_name}.failed.$(date '+%Y%m%d%H%M%S')"
+  if [[ -e "$preserved" ]]; then
+    preserved="${preserved}.$$"
+  fi
+
+  mv -- "$archive_file" "$preserved"
+  chmod 600 "$preserved"
+  log "Preserved unverified local archive at $preserved"
+}

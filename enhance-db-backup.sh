@@ -108,6 +108,15 @@ if [[ -n "$BACKUP_MYSQL_SOCKET" ]]; then
   MYSQLDUMP+=(--socket="$BACKUP_MYSQL_SOCKET")
 fi
 
+# Assign the library's generic-global contract from this runner's BACKUP_* env.
+RCLONE_TARGET=$BACKUP_RCLONE_TARGET
+VERIFY_MODE=$BACKUP_VERIFY_MODE
+UPLOAD_RETRIES=$BACKUP_UPLOAD_RETRIES
+UPLOAD_RETRY_DELAY=$BACKUP_UPLOAD_RETRY_DELAY
+LOW_LEVEL_RETRIES=$BACKUP_RCLONE_LOW_LEVEL_RETRIES
+FAILED_DIR=$BACKUP_FAILED_DIR
+RETENTION_DAYS=$BACKUP_RETENTION_DAYS
+
 RUN_DIR=""
 cleanup() {
   if [[ -n "$RUN_DIR" && -d "$RUN_DIR" ]]; then
@@ -178,99 +187,6 @@ write_metadata() {
     printf 'wp_config=%s\n' "$config_path"
   } >"$metadata_file"
   chmod 600 "$metadata_file"
-}
-
-rclone_remote_size() {
-  local remote_file=$1
-  local output
-  output=$("${RCLONE[@]}" size "$remote_file" --json 2>/dev/null || true)
-  printf '%s\n' "$output" | sed -nE 's/.*"bytes"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' | head -n 1
-}
-
-verify_rclone_archive() {
-  local archive_file=$1
-  local remote_file=$2
-  local archive_name=$3
-  local local_size remote_size
-
-  local_size=$(stat -c '%s' "$archive_file")
-  remote_size=$(rclone_remote_size "$remote_file")
-
-  if [[ -z "$remote_size" || "$remote_size" != "$local_size" ]]; then
-    log "Verification failed for archive=${archive_name}: local_size=${local_size} remote_size=${remote_size:-missing}"
-    return 1
-  fi
-
-  case "$BACKUP_VERIFY_MODE" in
-    size)
-      return 0
-      ;;
-    deep)
-      "${RCLONE[@]}" cat "$remote_file" | tar -tzf - >/dev/null
-      ;;
-    none)
-      return 0
-      ;;
-    *)
-      die "Invalid BACKUP_VERIFY_MODE=${BACKUP_VERIFY_MODE}; use size, deep, or none"
-      ;;
-  esac
-}
-
-upload_archive_with_retries() {
-  local archive_file=$1
-  local archive_name=$2
-  local remote_file="${BACKUP_RCLONE_TARGET}/${archive_name}"
-  local attempt status sleep_seconds
-
-  for ((attempt = 1; attempt <= BACKUP_UPLOAD_RETRIES; attempt++)); do
-    log "Uploading archive=${archive_name} to ${BACKUP_RCLONE_TARGET} attempt=${attempt}/${BACKUP_UPLOAD_RETRIES}"
-
-    set +e
-    "${RCLONE[@]}" copyto "$archive_file" "$remote_file" \
-      --retries 1 \
-      --low-level-retries "$BACKUP_RCLONE_LOW_LEVEL_RETRIES" \
-      --transfers 1 \
-      --checkers 4
-    status=$?
-    set -e
-
-    if ((status == 0)) && verify_rclone_archive "$archive_file" "$remote_file" "$archive_name"; then
-      log "Verified archive=${archive_name} remote=${remote_file} mode=${BACKUP_VERIFY_MODE}"
-      return 0
-    fi
-
-    if ((status != 0)); then
-      log "Upload attempt ${attempt} failed with rclone exit status ${status}"
-    else
-      log "Upload attempt ${attempt} completed but verification failed"
-    fi
-
-    if ((attempt < BACKUP_UPLOAD_RETRIES)); then
-      sleep_seconds=$((BACKUP_UPLOAD_RETRY_DELAY * attempt))
-      log "Retrying archive=${archive_name} in ${sleep_seconds}s"
-      sleep "$sleep_seconds"
-    fi
-  done
-
-  return 1
-}
-
-preserve_failed_archive() {
-  local archive_file=$1
-  local archive_name=$2
-  local preserved
-
-  mkdir -p "$BACKUP_FAILED_DIR"
-  chmod 700 "$BACKUP_FAILED_DIR"
-  preserved="$BACKUP_FAILED_DIR/${archive_name}.failed.$(date '+%Y%m%d%H%M%S')"
-  if [[ -e "$preserved" ]]; then
-    preserved="${preserved}.$$"
-  fi
-
-  mv -- "$archive_file" "$preserved"
-  chmod 600 "$preserved"
-  log "Preserved unverified local archive at $preserved"
 }
 
 backup_site() {
@@ -401,8 +317,8 @@ for config_path in "${CONFIGS[@]}"; do
   backup_site "$config_path"
 done
 
-if [[ "$DRY_RUN" == "false" && "$RUN_PRUNE" == "true" && "${BACKUP_RETENTION_DAYS:-0}" != "0" ]]; then
-  prune_remote "$BACKUP_RCLONE_TARGET" "$BACKUP_RETENTION_DAYS"
+if [[ "$DRY_RUN" == "false" && "$RUN_PRUNE" == "true" && "${RETENTION_DAYS:-0}" != "0" ]]; then
+  prune_remote "$RCLONE_TARGET" "$RETENTION_DAYS"
 fi
 
 log "Backup run complete"
