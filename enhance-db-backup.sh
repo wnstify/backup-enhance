@@ -6,6 +6,22 @@ DRY_RUN=false
 RUN_PRUNE=true
 ORIGINAL_ARGS=("$@")
 
+log() {
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S%z')" "$*"
+}
+
+# Permanently delete remote archives older than the retention window.
+# --b2-hard-delete removes the B2 object version instead of only hiding it;
+# without it, versioned buckets keep (and bill for) every "deleted" archive.
+prune_remote() {
+  local target=$1 retention_days=$2
+  log "Deleting remote archives older than ${retention_days}d from ${target}"
+  "${RCLONE[@]}" delete "$target" --b2-hard-delete --include '*.tar.gz' --min-age "${retention_days}d"
+}
+
+# Allow tests to source this file for its functions without running the backup.
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] || return 0
+
 usage() {
   cat <<'USAGE'
 Usage: enhance-db-backup [--dry-run] [--no-prune]
@@ -45,10 +61,6 @@ done
 if ((EUID != 0)); then
   exec sudo -- "$0" "${ORIGINAL_ARGS[@]}"
 fi
-
-log() {
-  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S%z')" "$*"
-}
 
 die() {
   log "ERROR: $*"
@@ -447,8 +459,7 @@ for config_path in "${CONFIGS[@]}"; do
 done
 
 if [[ "$DRY_RUN" == "false" && "$RUN_PRUNE" == "true" && "${BACKUP_RETENTION_DAYS:-0}" != "0" ]]; then
-  log "Deleting remote archives older than ${BACKUP_RETENTION_DAYS}d from ${BACKUP_RCLONE_TARGET}"
-  "${RCLONE[@]}" delete "$BACKUP_RCLONE_TARGET" --include '*.tar.gz' --min-age "${BACKUP_RETENTION_DAYS}d"
+  prune_remote "$BACKUP_RCLONE_TARGET" "$BACKUP_RETENTION_DAYS"
 fi
 
 log "Backup run complete"
