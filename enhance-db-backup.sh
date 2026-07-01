@@ -6,10 +6,6 @@ DRY_RUN=false
 RUN_PRUNE=true
 ORIGINAL_ARGS=("$@")
 
-log() {
-  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S%z')" "$*"
-}
-
 # Shared backup functions live next to the runner in a clone; the installer
 # inlines this file so the installed runner stays a single standalone script.
 source "$(dirname "${BASH_SOURCE[0]}")/enhance-backup-lib.sh" || { echo "cannot load enhance-backup-lib.sh" >&2; exit 1; }
@@ -56,15 +52,6 @@ done
 if ((EUID != 0)); then
   exec sudo -- "$0" "${ORIGINAL_ARGS[@]}"
 fi
-
-die() {
-  log "ERROR: $*"
-  exit 1
-}
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
-}
 
 if [[ ! -r "$ENV_FILE" ]]; then
   die "Config file is missing or unreadable: $ENV_FILE"
@@ -129,25 +116,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-quote_identifier() {
-  local value=${1//\`/\`\`}
-  printf '`%s`' "$value"
-}
-
 quote_string() {
   local value=${1//\'/\'\'}
   printf "'%s'" "$value"
-}
-
-extract_define() {
-  local name=$1
-  local file=$2
-  sed -nE "s/^[[:space:]]*define\\([[:space:]]*['\"]${name}['\"][[:space:]]*,[[:space:]]*['\"]([^'\"]+)['\"].*/\\1/p" "$file" | head -n 1
-}
-
-extract_table_prefix() {
-  local file=$1
-  sed -nE "s/^[[:space:]]*\\\$table_prefix[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"].*/\\1/p" "$file" | head -n 1
 }
 
 is_local_db_host() {
@@ -159,29 +130,6 @@ is_local_db_host() {
       ;;
   esac
   return 1
-}
-
-site_host_from_url() {
-  local url=$1
-  url=${url#http://}
-  url=${url#https://}
-  url=${url%%/*}
-  url=${url%%:*}
-  url=${url#www.}
-  printf '%s' "$url"
-}
-
-sanitize_slug() {
-  local value=$1
-  value=${value#www.}
-  if [[ "$BACKUP_NAME_MODE" == "first-label" ]]; then
-    value=${value%%.*}
-  fi
-  value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/_/g; s/^[._-]+//; s/[._-]+$//; s/[_]+/_/g')
-  if [[ -z "$value" ]]; then
-    value=site
-  fi
-  printf '%s' "$value"
 }
 
 mysql_scalar() {
@@ -433,7 +381,7 @@ backup_site() {
 declare -a CONFIGS=()
 while IFS= read -r -d '' config_path; do
   CONFIGS+=("$config_path")
-done < <(find "$BACKUP_WEB_ROOT" -mindepth 3 -maxdepth "$BACKUP_FIND_MAXDEPTH" -path '*/public_html/wp-config.php' -type f -print0 | sort -z)
+done < <(discover_wp_configs)
 
 if ((${#CONFIGS[@]} == 0)); then
   die "No WordPress wp-config.php files found under $BACKUP_WEB_ROOT"
