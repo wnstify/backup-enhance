@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 DB_RUNNER_SOURCE="$SCRIPT_DIR/enhance-db-backup.sh"
 FILES_RUNNER_SOURCE="$SCRIPT_DIR/enhance-files-backup.sh"
+LIB_RUNNER_SOURCE="$SCRIPT_DIR/enhance-backup-lib.sh"
 DB_INSTALL_BIN=/usr/local/sbin/enhance-db-backup
 FILES_INSTALL_BIN=/usr/local/sbin/enhance-files-backup
 CONFIG_DIR=/etc/enhance-db-backup
@@ -156,6 +157,18 @@ WantedBy=timers.target
 TIMER
 }
 
+# Inline the shared library into a runner, emitting a standalone script on
+# stdout: the single `source ...enhance-backup-lib.sh` line is replaced by the
+# library body (its shebang stripped). Defined above the source-guard so
+# test_assemble.sh can drive it without running the installer.
+assemble_runner() {
+  local runner=$1 lib=$2
+  LIB_BODY=$(tail -n +2 "$lib") awk '
+    /source.*enhance-backup-lib\.sh/ { print ENVIRON["LIB_BODY"]; next }
+    { print }
+  ' "$runner"
+}
+
 # Tests source this file for the pure renderers above; stop before the
 # interactive install runs.
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] || return 0
@@ -241,22 +254,38 @@ TIMER_OPTIONS
 
 # When piped from GitHub the runners are not on disk next to this script, so
 # fetch them into a temp dir from REPO_RAW_BASE.
-if [[ ! -f "$DB_RUNNER_SOURCE" || ! -f "$FILES_RUNNER_SOURCE" ]]; then
+if [[ ! -f "$DB_RUNNER_SOURCE" || ! -f "$FILES_RUNNER_SOURCE" || ! -f "$LIB_RUNNER_SOURCE" ]]; then
   command -v curl >/dev/null 2>&1 || { apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y curl; }
   BOOTSTRAP_DIR=$(mktemp -d)
   trap 'rm -rf "$BOOTSTRAP_DIR"' EXIT
-  log "Fetching runners from $REPO_RAW_BASE"
-  for runner in enhance-db-backup.sh enhance-files-backup.sh; do
+  log "Fetching runners and library from $REPO_RAW_BASE"
+  for runner in enhance-db-backup.sh enhance-files-backup.sh enhance-backup-lib.sh; do
     curl -fsSL "$(runner_url "$runner")" -o "$BOOTSTRAP_DIR/$runner" \
       || die "Failed to download $runner from $REPO_RAW_BASE"
     [[ -s "$BOOTSTRAP_DIR/$runner" ]] || die "Downloaded $runner is empty"
   done
   DB_RUNNER_SOURCE="$BOOTSTRAP_DIR/enhance-db-backup.sh"
   FILES_RUNNER_SOURCE="$BOOTSTRAP_DIR/enhance-files-backup.sh"
+  LIB_RUNNER_SOURCE="$BOOTSTRAP_DIR/enhance-backup-lib.sh"
 fi
 
 [[ -f "$DB_RUNNER_SOURCE" ]] || die "Runner not found: $DB_RUNNER_SOURCE"
 [[ -f "$FILES_RUNNER_SOURCE" ]] || die "Runner not found: $FILES_RUNNER_SOURCE"
+[[ -f "$LIB_RUNNER_SOURCE" ]] || die "Library not found: $LIB_RUNNER_SOURCE"
+
+# Assemble a runner into a standalone fat file, validate it, then install it.
+# Guards against ever shipping a runner that fails to parse or still points at
+# a library file that won't exist in /usr/local/sbin.
+install_runner() {
+  local src=$1 dest=$2 tmp
+  tmp=$(mktemp)
+  assemble_runner "$src" "$LIB_RUNNER_SOURCE" >"$tmp"
+  bash -n "$tmp" || die "Assembled runner failed syntax check: $dest"
+  ! grep -qE 'source.*enhance-backup-lib' "$tmp" \
+    || die "Assembled runner still sources the library: $dest"
+  install -o root -g root -m 0755 "$tmp" "$dest"
+  rm -f "$tmp"
+}
 
 default_host=$(hostname -s 2>/dev/null || hostname)
 
@@ -311,8 +340,8 @@ log "Installing packages"
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates mariadb-client rclone
 
-install -o root -g root -m 0755 "$DB_RUNNER_SOURCE" "$DB_INSTALL_BIN"
-install -o root -g root -m 0755 "$FILES_RUNNER_SOURCE" "$FILES_INSTALL_BIN"
+install_runner "$DB_RUNNER_SOURCE" "$DB_INSTALL_BIN"
+install_runner "$FILES_RUNNER_SOURCE" "$FILES_INSTALL_BIN"
 install -o root -g root -m 0700 -d "$CONFIG_DIR"
 
 if [[ -f "$ENV_FILE" ]]; then

@@ -10,14 +10,9 @@ log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S%z')" "$*"
 }
 
-# Permanently delete remote archives older than the retention window.
-# --b2-hard-delete removes the B2 object version instead of only hiding it;
-# without it, versioned buckets keep (and bill for) every "deleted" archive.
-prune_remote() {
-  local target=$1 retention_days=$2
-  log "Deleting remote archives older than ${retention_days}d from ${target}"
-  "${RCLONE[@]}" delete "$target" --b2-hard-delete --include '*.tar.gz' --min-age "${retention_days}d"
-}
+# Shared backup functions live next to the runner in a clone; the installer
+# inlines this file so the installed runner stays a single standalone script.
+source "$(dirname "${BASH_SOURCE[0]}")/enhance-backup-lib.sh" || { echo "cannot load enhance-backup-lib.sh" >&2; exit 1; }
 
 # Allow tests to source this file for its functions without running the backup.
 [[ "${BASH_SOURCE[0]}" == "${0}" ]] || return 0
