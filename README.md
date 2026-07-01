@@ -19,7 +19,8 @@ One command sets up both the database and files backups. Straight from GitHub:
 sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/wnstify/backup-enhance/main/install.sh)"
 ```
 
-This fetches both runners into a temp directory and walks you through setup.
+This fetches both runners and the shared library into a temp directory and
+walks you through setup.
 Prompts read from the terminal, so the command stays interactive. Or, from a
 clone of this repo:
 
@@ -213,12 +214,18 @@ sudo systemctl restart enhance-files-backup.timer
 ```
 
 If logs show `file changed as we read it` or local `.wpress` archives are being
-included, update the installed runner from the latest repo version:
+included, update the installed runners from the latest repo version by
+re-running the installer. It inlines the shared library into each runner,
+syntax-checks the assembled result, and reinstalls it:
 
 ```bash
-sudo install -o root -g root -m 0755 enhance-files-backup.sh /usr/local/sbin/enhance-files-backup
-sudo bash -n /usr/local/sbin/enhance-files-backup
+sudo ./install.sh
 ```
+
+Re-running is a safe in-place upgrade: it keeps your stored B2 key and prefills
+every prompt from the current `/etc/enhance-db-backup/env`. Installing a runner
+by hand no longer works, because each runner sources `enhance-backup-lib.sh`,
+which the installer inlines; only `install.sh` produces a standalone runner.
 
 New installs include these settings automatically.
 
